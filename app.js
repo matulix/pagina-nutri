@@ -6,15 +6,15 @@ const plan = {
   desayuno: {
     title: "Desayuno", emoji: "☕",
     options: [
-      { title: "Opción 1", description: "2 rodajas de pan lactal integral + 2 huevos + semillas de chía + fruta a elección + infusión a elección.", ingredients: ["pan lactal integral", "huevos", "semillas de chía", "fruta a elección", "infusión a elección"] },
-      { title: "Opción 2", description: "1 taza de yogur + fruta cortada en cubos + 1 huevo + puñado de frutos secos + ½ taza de cereales.", ingredients: ["yogur", "fruta a elección", "huevos", "frutos secos", "cereales"] }
+      { title: "Opción 1", description: "2 rodajas de pan lactal integral + 2 huevos + 1 cucharada de semillas de chía + fruta a elección + 1 vaso de leche.", ingredients: ["pan lactal integral", "huevos", "semillas de chía", "fruta a elección", "leche"] },
+      { title: "Opción 2", description: "1 taza de yogur + fruta cortada en cubos + un puñado de frutos secos + ¼ de taza de cereales.", ingredients: ["yogur", "fruta a elección", "frutos secos", "cereales"] }
     ]
   },
   almuerzo: {
     title: "Almuerzo", emoji: "🥗",
     options: [
-      { title: "Opción 1", description: "1 trozo de cuadril + ¼ de taza de arroz integral + mix de verduras al horno (zanahoria, batata y cebolla) + 1 cucharada de aceite de oliva + agua.", ingredients: ["cuadril", "arroz integral", "zanahoria", "batata", "cebolla", "aceite de oliva"] },
-      { title: "Opción 2", description: "2 rapiditas integrales + cebolla y morrón salteados + nalga en tiras + dip de palta + agua.", ingredients: ["rapiditas integrales", "cebolla", "morrón", "nalga", "palta"] }
+      { title: "Opción 1", description: "1 trozo de cuadril + ¼ de taza de arroz integral cocido + mix de verduras al horno (zapallito, zanahoria y cebolla) + 1 cucharada de aceite de oliva + agua.", ingredients: ["cuadril", "arroz integral", "zapallito", "zanahoria", "cebolla", "aceite de oliva"] },
+      { title: "Opción 2", description: "2 rapiditas integrales + cebolla y morrón salteados + nalga en tiras + 1 cucharada de dip de palta + agua.", ingredients: ["rapiditas integrales", "cebolla", "morrón", "nalga", "palta"] }
     ]
   },
   merienda: {
@@ -27,8 +27,8 @@ const plan = {
   cena: {
     title: "Cena", emoji: "🍽️",
     options: [
-      { title: "Opción 1", description: "1 milanesa de peceto rebozada en avena + ensalada (lentejas o garbanzos, huevo, tomate y palta) + agua.", ingredients: ["peceto", "avena", "lentejas o garbanzos", "huevos", "tomate", "palta"] },
-      { title: "Opción 2", description: "1 trozo de pechuga de pollo en cubos + tomate + remolacha + crutones + aceite de oliva + agua.", ingredients: ["pechuga de pollo", "tomate", "remolacha", "crutones", "aceite de oliva"] }
+      { title: "Opción 1", description: "1 milanesa chica de peceto rebozada en avena + ensalada (lentejas o garbanzos, tomate, zanahoria, lechuga y palta) + agua.", ingredients: ["peceto", "avena", "lentejas o garbanzos", "tomate", "zanahoria", "lechuga", "palta"] },
+      { title: "Opción 2", description: "1 trozo de pechuga de pollo en cubos + tomate + remolacha + crutones + 1 cucharada de aceite de oliva + agua.", ingredients: ["pechuga de pollo", "tomate", "remolacha", "crutones", "aceite de oliva"] }
     ]
   }
 };
@@ -116,8 +116,11 @@ function ingredientsForChosenMeals() {
 }
 function buildShoppingItems() {
   const generated = ingredientsForChosenMeals();
+  const hidden = JSON.parse(localStorage.getItem("nutri-hidden-shopping-items") || "{}");
+  const hiddenToday = new Set(hidden[localDayKey()] || []);
+  const visibleGenerated = generated.filter(item => !hiddenToday.has(item.id));
   const manual = manualItems.map(item => ({ ...item }));
-  currentShoppingItems = [...generated, ...manual];
+  currentShoppingItems = [...visibleGenerated, ...manual];
 }
 function renderShoppingList() {
   if (!$("#shopping-list")) return;
@@ -130,13 +133,32 @@ function renderShoppingList() {
   const groups = [...new Set(currentShoppingItems.map(item => item.category))];
   $("#shopping-list").innerHTML = groups.map(category => {
     const items = currentShoppingItems.filter(item => item.category === category);
-    return `<section class="shopping-group"><h3>${category}</h3>${items.map(item => {
+    return `<section class="shopping-group"><h3>${escapeHtml(category)}</h3>${items.map(item => {
       const checked = !!checkedItems[item.id];
-      return `<label class="shopping-item ${checked ? "checked" : ""}"><input type="checkbox" data-item-id="${escapeHtml(item.id)}" ${checked ? "checked" : ""}><span>${escapeHtml(item.name)}</span></label>`;
+      const isManual = String(item.id).startsWith("manual-");
+      return `<div class="shopping-item-row">
+        <label class="shopping-item ${checked ? "checked" : ""}"><input type="checkbox" data-item-id="${escapeHtml(item.id)}" ${checked ? "checked" : ""}><span>${escapeHtml(item.name)}</span></label>
+        <button type="button" class="delete-shopping-item" data-delete-item="${escapeHtml(item.id)}" aria-label="Eliminar ${escapeHtml(item.name)}" title="${isManual ? "Quitar producto agregado" : "Quitar de la lista de hoy"}">×</button>
+      </div>`;
     }).join("")}</section>`;
   }).join("");
   $$("#shopping-list input[type=checkbox]").forEach(input => input.addEventListener("change", () => {
     checkedItems[input.dataset.itemId] = input.checked;
+    localStorage.setItem("nutri-checked-items", JSON.stringify(checkedItems));
+    renderShoppingList();
+  }));
+  $$("#shopping-list [data-delete-item]").forEach(button => button.addEventListener("click", () => {
+    const id = button.dataset.deleteItem;
+    if (String(id).startsWith("manual-")) {
+      manualItems = manualItems.filter(item => item.id !== id);
+      localStorage.setItem("nutri-manual-items", JSON.stringify(manualItems));
+    } else {
+      // Los ingredientes generados se ocultan para la fecha actual sin alterar las recetas.
+      const hidden = JSON.parse(localStorage.getItem("nutri-hidden-shopping-items") || "{}");
+      hidden[localDayKey()] = [...new Set([...(hidden[localDayKey()] || []), id])];
+      localStorage.setItem("nutri-hidden-shopping-items", JSON.stringify(hidden));
+    }
+    delete checkedItems[id];
     localStorage.setItem("nutri-checked-items", JSON.stringify(checkedItems));
     renderShoppingList();
   }));
