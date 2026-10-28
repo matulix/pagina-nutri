@@ -42,7 +42,7 @@ const snacks = [
 const categoryRules = [
   { name: "Verdulería y frutería", match: /fruta|banana|pera|zanahoria|batata|cebolla|morrón|palta|tomate|remolacha|manzana|uvas|durazno/ },
   { name: "Carnicería y pescadería", match: /cuadril|nalga|peceto|pollo/ },
-  { name: "Lácteos y huevos", match: /yogur|huevos/ },
+  { name: "Lácteos y huevos", match: /yogur|leche|queso|huevos/ },
   { name: "Almacén", match: /pan lactal integral|semillas de chía|infusión|frutos secos|cereales|arroz integral|aceite de oliva|rapiditas integrales|avena|miel|harina de avena|pasta de maní|lentejas o garbanzos|garbanzos|lentejas|crutones|barritas integra|chocolate/ }
 ];
 
@@ -120,7 +120,17 @@ function buildShoppingItems() {
   const hiddenToday = new Set(hidden[localDayKey()] || []);
   const visibleGenerated = generated.filter(item => !hiddenToday.has(item.id));
   const manual = manualItems.map(item => ({ ...item }));
-  currentShoppingItems = [...visibleGenerated, ...manual];
+
+  // Completa la categoría de lácteos y huevos con básicos que el usuario puede quitar si no los necesita.
+  const dairyBasics = [
+    { name: "leche", category: "Lácteos y huevos", id: "basic-leche" },
+    { name: "yogur", category: "Lácteos y huevos", id: "basic-yogur" },
+    { name: "queso", category: "Lácteos y huevos", id: "basic-queso" }
+  ];
+  const existingNames = new Set([...visibleGenerated, ...manual].map(item => item.name.toLowerCase()));
+  const hiddenBasics = new Set(hiddenToday);
+  const optionalDairy = dairyBasics.filter(item => !existingNames.has(item.name) && !hiddenBasics.has(item.id));
+  currentShoppingItems = [...visibleGenerated, ...optionalDairy, ...manual];
 }
 function renderShoppingList() {
   if (!$("#shopping-list")) return;
